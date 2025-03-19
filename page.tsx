@@ -115,29 +115,33 @@ export default function CsvVisualizationTool() {
         </CardContent>
       </Card>
 
-      {/* Display Graphs in a Single Column Layout for Scrolling */}
-      {Object.keys(chartData).map((key) => (
-        <Card key={key} className="p-6 shadow-lg rounded-xl bg-white">
-          <CardContent>
-            <h2 className="text-lg font-semibold mb-4 text-center text-gray-800">
-              {key} Visualization
-            </h2>
-            {chartData[key] && (
-              <Line
-                data={chartData[key]}
-                options={{
-                  responsive: true,
-                  plugins: { legend: { position: "top" } },
-                  scales: {
-                    x: { title: { display: true, text: "Age" } },
-                    y: { title: { display: true, text: "Value ($)" } },
-                  },
-                }}
-              />
-            )}
-          </CardContent>
-        </Card>
-      ))}
+      {/* Display Graphs in a Fixed Viewport */}
+      <div className="grid grid-cols-2 gap-4 overflow-y-auto max-h-[80vh] pb-4">
+        {Object.keys(chartData).map((key) => (
+          <Card key={key} className="p-6 shadow-lg rounded-xl bg-white">
+            <CardContent>
+              <h2 className="text-lg font-semibold mb-4 text-center text-gray-800">
+                {key} Visualization
+              </h2>
+              {chartData[key] && (
+                <Line
+                  data={chartData[key]}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: "top" } },
+                    scales: {
+                      x: { title: { display: true, text: "Age" } },
+                      y: { title: { display: true, text: "Value ($)" } },
+                    },
+                  }}
+                  height={200}
+                />
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {policies.length > 0 &&
         policies.map((policy, index) => (
