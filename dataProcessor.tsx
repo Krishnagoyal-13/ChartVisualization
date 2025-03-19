@@ -18,11 +18,18 @@ export const DataProcessor = {
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
 
-      const jsonData: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
-        defval: 0,
+      // Read first few rows to detect headers dynamically
+      const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
       });
 
-      if (jsonData.length === 0) {
+      // Identify the header row by searching for "age" or "year" in the first column
+      let headerRowIndex = rawData.findIndex(
+        (row) => row[0] && /age|year/i.test(row[0].toString())
+      );
+
+      if (headerRowIndex === -1 || headerRowIndex + 1 >= rawData.length) {
         console.warn("Uploaded file is empty or improperly formatted.");
         callback({
           company: "Unknown",
@@ -34,6 +41,21 @@ export const DataProcessor = {
         return;
       }
 
+      console.log("Detected header row index:", headerRowIndex);
+      const headers = rawData[headerRowIndex].map((cell: any) =>
+        cell ? cell.toString().trim().toLowerCase().replace(/\s+/g, " ") : ""
+      );
+      console.log("Detected Headers:", headers);
+
+      // Extract data from rows below the detected header row
+      const jsonData = rawData.slice(headerRowIndex + 1).map((row) => {
+        let formattedRow: Record<string, any> = {};
+        headers.forEach((header, index) => {
+          formattedRow[header] = row[index] !== undefined ? row[index] : 0;
+        });
+        return formattedRow;
+      });
+
       // Detect company name from filename
       const fileName = file.name.toLowerCase();
       const companyMap: Record<string, string> = {
@@ -42,17 +64,10 @@ export const DataProcessor = {
         sun: "Sun Life",
         equitable: "Equitable Life",
       };
-
       let company =
         Object.keys(companyMap).find((key) => fileName.includes(key)) ||
         "Unknown";
       company = companyMap[company] || "Unknown";
-
-      // Normalize column headers
-      const normalizedKeys = Object.keys(jsonData[0]).reduce((acc, key) => {
-        acc[key.toLowerCase().trim()] = key;
-        return acc;
-      }, {} as Record<string, string>);
 
       // Define standardized column names
       const standardizedColumnNames: Record<string, string> = {
@@ -72,19 +87,30 @@ export const DataProcessor = {
           "premium",
           "deposit",
           "yearly premium",
+          "payments",
+          "total yearly premium",
         ],
-        gcv: ["guaranteed cash value", "cash value"],
-        tcv: ["total cash value", "cash surrender value"],
+        gcv: ["guaranteed cash value"],
+        tcv: [
+          "total cash value",
+          "account value",
+          "cash surrender value",
+          "fund value (primary rate)",
+        ],
         tdb: [
           "total death benefit",
+          "total term",
           "primary insured person's death benefit",
           "total payout on death",
+          "total policy death benefit",
+          "total policy death benefit (primary rate)",
+          "critical illness insurance benefit",
         ],
       };
 
-      const findColumn = (possibleNames: string[]) =>
-        Object.keys(normalizedKeys).find((key) =>
-          possibleNames.some((name) => key.includes(name.toLowerCase()))
+      const findColumn = (possibleNames: string[]): string =>
+        headers.find((header: string) =>
+          possibleNames.some((name) => header.includes(name.toLowerCase()))
         ) || "";
 
       // Detect and standardize columns using the column map
@@ -94,22 +120,29 @@ export const DataProcessor = {
       let tcvCol = findColumn(columnMap["tcv"]) || "tcv";
       let tdbCol = findColumn(columnMap["tdb"]) || "tdb";
 
+      console.log("Detected Columns:", {
+        ageCol,
+        premiumCol,
+        gcvCol,
+        tcvCol,
+        tdbCol,
+      });
+
       // Standardize data storage with uniform column names and calculate Dollar Value
       let accumulatedPremium = 0;
-      const tableData = jsonData.map((row) => {
-        accumulatedPremium += row[normalizedKeys[premiumCol]] || 0;
-        let formattedRow: Record<string, any> = {
-          Age: row[normalizedKeys[ageCol]] || 0,
-          Premium: row[normalizedKeys[premiumCol]] || 0,
-          "Guaranteed Cash Value": row[normalizedKeys[gcvCol]] || 0,
-          "Total Cash Value": row[normalizedKeys[tcvCol]] || 0,
-          "Total Death Benefit": row[normalizedKeys[tdbCol]] || 0,
+      const tableData = jsonData.map((row: any) => {
+        accumulatedPremium += row[premiumCol] || 0;
+        return {
+          Age: row[ageCol] || 0,
+          Premium: row[premiumCol] || 0,
+          "Guaranteed Cash Value": row[gcvCol] || 0,
+          "Total Cash Value": row[tcvCol] || 0,
+          "Total Death Benefit": row[tdbCol] || 0,
           "Dollar Value":
             accumulatedPremium > 0
-              ? (row[normalizedKeys[tcvCol]] || 0) / accumulatedPremium
+              ? (row[tcvCol] || 0) / accumulatedPremium
               : 0,
         };
-        return formattedRow;
       });
 
       callback({
