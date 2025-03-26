@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataProcessor, ProcessedData } from "@/components/dataProcessor";
+import Summary from "@/components/summary";
 
 ChartJS.register(
   CategoryScale,
@@ -142,6 +143,9 @@ export default function CsvVisualizationTool() {
           </Card>
         ))}
       </div>
+
+      {/* Summary Section */}
+      <Summary policies={policies} />
 
       {policies.length > 0 &&
         policies.map((policy, index) => (
